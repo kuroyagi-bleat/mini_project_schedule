@@ -1,0 +1,217 @@
+:root {
+    --bg-gradient: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+    --text-primary: #f1f5f9;
+    --text-secondary: #94a3b8;
+    --accent-primary: #38bdf8;
+    --accent-secondary: #818cf8;
+    --glass-bg: rgba(255, 255, 255, 0.05);
+    --glass-border: rgba(255, 255, 255, 0.1);
+    --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+    --danger: #ef4444;
+    # Red for delete --font-family: 'Inter', system-ui, Avenir, Helvetica, Arial, sans-serif;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    min-height: 100vh;
+    font-family: var(--font-family);
+    background: var(--bg-gradient);
+    color: var(--text-primary);
+    -webkit-font-smoothing: antialiased;
+    padding: 2rem;
+}
+
+.container {
+    max-width: 1280px;
+    margin: 0 auto;
+}
+
+h1,
+h2,
+h3 {
+    margin-top: 0;
+    font-weight: 700;
+}
+
+h1 {
+    font-size: 2.5rem;
+    background: linear-gradient(to right, var(--accent-primary), var(--accent-secondary));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    margin-bottom: 2rem;
+    text-align: center;
+}
+
+/* Glassmorphism Card */
+.glass-card {
+    background: var(--glass-bg);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--glass-shadow);
+    border-radius: 16px;
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+}
+
+/* Inputs & Buttons */
+input[type="date"],
+input[type="number"],
+input[type="text"] {
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid var(--glass-border);
+    border-radius: 6px;
+    padding: 0.6rem;
+    color: var(--text-primary);
+    font-family: inherit;
+    font-size: 1rem;
+    width: 100%;
+}
+
+button {
+    border-radius: 8px;
+    border: 1px solid transparent;
+    padding: 0.6em 1.2em;
+    font-size: 1em;
+    font-weight: 500;
+    font-family: inherit;
+    background-color: var(--accent-primary);
+    color: #0f172a;
+    cursor: pointer;
+    transition: all 0.25s;
+}
+
+button:hover {
+    filter: brightness(1.1);
+}
+
+button.icon-btn {
+    padding: 0.4rem;
+    background: transparent;
+    color: var(--text-secondary);
+    border: 1px solid transparent;
+}
+
+button.icon-btn:hover {
+    color: var(--danger);
+    background: rgba(239, 68, 68, 0.1);
+}
+
+button.add-btn {
+    width: 100%;
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--accent-primary);
+    border: 1px dashed var(--glass-border);
+    margin-top: 1rem;
+}
+
+button.add-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: var(--accent-primary);
+}
+
+/* Layout */
+.grid-layout {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+    gap: 2rem;
+}
+
+.phase-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+    padding: 0.5rem;
+    border-radius: 6px;
+    transition: background 0.2s;
+}
+
+.phase-row:hover {
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.phase-name-input {
+    flex-grow: 1;
+}
+
+.phase-days-input {
+    width: 70px !important;
+    text-align: right;
+}
+
+/* Header & Actions */
+.section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+
+.section-header h3 {
+    margin: 0;
+}
+
+.panel-actions {
+    display: flex;
+    gap: 0.5rem;
+}
+
+/* Timeline */
+.timeline-item {
+    border-left: 2px solid var(--glass-border);
+    padding-left: 1rem;
+    position: relative;
+    padding-bottom: 1rem;
+}
+
+.timeline-item::before {
+    content: '';
+    position: absolute;
+    left: -5px;
+    top: 0;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--accent-secondary);
+}
+
+.timeline-date {
+    font-size: 0.85rem;
+    color: var(--accent-secondary);
+    margin-bottom: 0.25rem;
+}
+
+.timeline-title {
+    font-weight: 500;
+}
+
+.timeline-subtitle {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}
+
+.kickoff-display {
+    text-align: center;
+    margin-bottom: 2rem;
+}
+
+.kickoff-label {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+}
+
+.kickoff-date {
+    font-size: 2.5rem;
+    font-weight: bold;
+    color: var(--accent-primary);
+    margin-top: 0.5rem;
+}

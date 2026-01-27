@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Schedule Back-Calc (Vanilla)</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="gantt.css">
+</head>
+
+<body>
+
+    <div class="container">
+
+        <!-- HEADER / TITLE -->
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+            <h1 style="margin:0; font-size:2rem;">🚀 Project Back-Scheduler</h1>
+            <div style="display:flex; gap:0.5rem; align-items:center;">
+                <button id="save-btn" class="btn-secondary" style="padding:0.4rem 0.8rem; font-size:0.9rem;">💾
+                    Save</button>
+                <button id="load-btn" class="btn-secondary" style="padding:0.4rem 0.8rem; font-size:0.9rem;">📂
+                    Load</button>
+                <button id="settings-toggle-btn" class="icon-btn"
+                    style="font-size:1.2rem; background:rgba(255,255,255,0.1); border-radius:50%; width:40px; height:40px; display:flex; align-items:center; justify-content:center;"
+                    title="Global Settings">⚙️</button>
+                <input type="file" id="file-input" accept=".json" style="display:none">
+            </div>
+        </div>
+
+        <!-- SECTION 1: GLOBAL SETTINGS (Accordion) -->
+        <div id="global-settings-panel" class="glass-card"
+            style="display:none; margin-bottom: 2rem; border-top: 4px solid var(--accent-secondary); animation: fadeIn 0.3s ease;">
+            <div class="section-header">
+                <h3 style="margin:0;">🌍 Global Settings (全タイムライン共通)</h3>
+            </div>
+
+            <div style="display:flex; flex-direction:column; gap:0.5rem; margin-top:1rem;">
+                <label style="display:block;">
+                    祝日・休日設定 (YYYY-MM-DD format)
+                    <span
+                        style="display:block; font-size:0.8rem; color:var(--text-secondary); margin-top:0.2rem; font-weight:normal;">
+                        ※土日はすでに除外されています
+                    </span>
+                </label>
+                <textarea id="holidays-input" class="json-input" style="width:100%; min-height:120px;"
+                    placeholder="2026-01-01&#10;2026-05-03"></textarea>
+            </div>
+        </div>
+
+
+        <!-- SECTION 2: TIMELINE SPECIFIC CONFIG -->
+        <div class="glass-card" style="margin-bottom: 2rem; border-top: 4px solid var(--accent-primary);">
+            <div class="section-header">
+                <h3>⚙️ Timeline Configuration (個別設定)</h3>
+            </div>
+
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 2rem;">
+
+                <!-- Timeline Manager -->
+                <div>
+                    <label>Timeline Selection (スプリント/PI切替)</label>
+                    <div class="glass-card"
+                        style="margin:0; padding:1rem; background:rgba(0,0,0,0.2); display:flex; align-items:center; gap:0.5rem; justify-content:space-between;">
+
+                        <select id="timeline-select" style="flex-grow:1; padding:0.5rem;">
+                            <!-- Populated by JS -->
+                        </select>
+
+                        <div style="display:flex; gap:0.2rem;">
+                            <button id="add-timeline-btn" class="icon-btn" title="新規作成">➕</button>
+                            <button id="rename-timeline-btn" class="icon-btn" title="名前変更">✏️</button>
+                            <button id="delete-timeline-btn" class="icon-btn" title="削除"
+                                style="color:var(--danger);">🗑️</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Anchor Settings -->
+                <div>
+                    <label>Anchor Settings (基準日設定)</label>
+                    <div class="glass-card" style="margin:0; padding: 1rem; background: rgba(0,0,0,0.2);">
+                        <div style="margin-bottom: 0.75rem;">
+                            <label style="font-size:0.8rem;">Anchor Phase (基準にする工程)</label>
+                            <select id="anchor-phase-select"
+                                style="width:100%; padding:0.5rem; border-radius:6px; background:rgba(255,255,255,0.05); color:var(--text-primary); border:1px solid var(--glass-border);">
+                                <!-- Populated by JS -->
+                            </select>
+                        </div>
+
+                        <div style="display:flex; justify-content:space-between; align-items:flex-end;">
+                            <div style="flex-grow:1; margin-right:1rem;">
+                                <label style="font-size:0.8rem;">Date (日付)</label>
+                                <input type="date" id="anchor-date-input" style="width:100%;">
+                            </div>
+
+                            <div style="display:flex; gap:0.5rem; align-items:center; height:42px;">
+                                <label style="display:flex; align-items:center; cursor:pointer;">
+                                    <input type="radio" name="top-anchor-type" value="start">
+                                    <span style="margin-left:4px; font-size:0.9rem;">開始</span>
+                                </label>
+                                <label style="display:flex; align-items:center; cursor:pointer;">
+                                    <input type="radio" name="top-anchor-type" value="end">
+                                    <span style="margin-left:4px; font-size:0.9rem;">完了</span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+
+        <!-- SECTION 3: WORK AREA -->
+        <div class="grid-layout">
+            <!-- Phase Configuration Panel -->
+            <section>
+                <div class="glass-card">
+                    <h3>📅 Phase Steps (工程一覧)</h3>
+                    <div id="phase-list">
+                        <!-- Populated by JS -->
+                    </div>
+                    <button id="add-phase-btn" class="add-btn">+ Add Step (工程を追加)</button>
+                </div>
+            </section>
+
+            <!-- Results Panel -->
+            <section>
+                <div class="glass-card" style="position: relative; overflow: hidden; min-height: 200px;">
+                    <div
+                        style="position: absolute; top: 0; left: 0; right: 0; height: 4px; background: linear-gradient(90deg, var(--accent-primary), var(--accent-secondary));">
+                    </div>
+
+                    <div
+                        style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; padding-top:0.5rem;">
+                        <h3 style="margin:0;">📊 Schedule (結果)</h3>
+                        <div style="display:flex; gap:0.5rem;">
+                            <button id="copy-text-btn" class="btn-secondary"
+                                style="font-size:0.8rem; padding:0.3rem 0.8rem; display:flex; align-items:center; gap:0.4rem;"
+                                title="テキストとしてコピー">
+                                📋 Copy Text
+                            </button>
+                            <button id="sort-toggle-btn" class="btn-secondary"
+                                style="font-size:0.8rem; padding:0.3rem 0.8rem; display:flex; align-items:center; gap:0.4rem;">
+                                <span>Sort: Chronological ⬇️</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div id="result-container">
+                        <!-- Populated by JS -->
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <!-- SECTION 4: GANTT CHART -->
+        <div class="glass-card" style="margin-top: 2rem; overflow: hidden;">
+            <div class="section-header" style="margin-bottom:1rem;">
+                <h3 style="margin:0;">📅 Gantt Chart (ガントチャート)</h3>
+            </div>
+            <div id="gantt-container" style="overflow-x: auto; padding-bottom: 1rem;">
+                <!-- Populated by JS -->
+            </div>
+        </div>
+
+    </div>
+
+    <script src="script.js"></script>
+</body>
+
+</html>

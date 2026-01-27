@@ -1,0 +1,96 @@
+/* Gantt Chart */
+#gantt-container {
+    /* Main container for scroll */
+    width: 100%;
+    /* Use fixed width per day logic in JS, so scroll depends on content width */
+}
+
+.gantt-header {
+    display: flex;
+    margin-bottom: 0.5rem;
+    position: relative;
+    /* was sticky, caused scroll issues? */
+    /* top: 0; */
+    z-index: 10;
+    background: rgba(15, 23, 42, 0.9);
+}
+
+.gantt-header-cell {
+    border-right: 1px solid var(--glass-border);
+    text-align: center;
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    padding: 0.25rem 0;
+    flex-shrink: 0;
+    /* width set via inline style in JS */
+}
+
+.gantt-row {
+    position: relative;
+    height: 40px;
+    border-bottom: 1px solid var(--glass-border);
+    display: flex;
+    /* Just to match width context */
+    align-items: center;
+}
+
+.gantt-row:hover {
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.gantt-bar {
+    position: absolute;
+    height: 24px;
+    border-radius: 4px;
+    background: var(--accent-primary);
+    top: 8px;
+    /* (40 - 24) / 2 */
+    display: flex;
+    align-items: center;
+    padding-left: 0.5rem;
+    color: #0f172a;
+    font-size: 0.75rem;
+    font-weight: bold;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    transition: all 0.2s;
+}
+
+.gantt-bar:hover {
+    filter: brightness(1.1);
+    z-index: 5;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+}
+
+.gantt-grid-lines {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    pointer-events: none;
+    display: flex;
+}
+
+.gantt-grid-line {
+    border-right: 1px dotted var(--glass-border);
+    flex-shrink: 0;
+}
+
+.gantt-weekend {
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.gantt-holiday {
+    background: rgba(239, 68, 68, 0.1);
+}
+
+.gantt-today-line {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    border-left: 2px solid var(--accent-secondary);
+    z-index: 2;
+    pointer-events: none;
+}
