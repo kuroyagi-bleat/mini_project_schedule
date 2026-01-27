@@ -204,11 +204,6 @@ function calculateSchedule(targetData = null) {
 
     const anchorIndex = data.phases.findIndex(p => p.id === data.anchorPhaseId);
     if (anchorIndex === -1 && data.phases.length > 0) {
-        // Safe fallback if anchor ID is lost, but might mutate data if we are just calculating for display.
-        // For read-only views, we might just want to return empty or handle gracefully.
-        // But here we might correct it.
-        // Let's avoid checking logic that mutates data if we are passed specific data, 
-        // OR just accept it because we want valid schedules.
         data.anchorPhaseId = data.phases[0].id;
         return calculateSchedule(data);
     }
@@ -217,6 +212,39 @@ function calculateSchedule(targetData = null) {
     const results = new Array(data.phases.length);
     const anchorDateObj = new Date(data.anchorDate);
     const anchorPhase = data.phases[anchorIndex];
+
+    // --- Helper: Process Parallel Items ---
+    // Parallel items do not affect the RefDate chain.
+    const processParallel = (idx) => {
+        const p = data.phases[idx];
+        if (p.isParallel) {
+            // Use manual dates if present, else default to today? 
+            // Better: if missing, keep them null or try to preserve days?
+            // If user just checked "Parallel", we might not have dates yet.
+            // Let's assume input validation or fallback.
+            // Fallback: Anchor Date start, + days.
+            let s = p.manualStartDate ? new Date(p.manualStartDate) : new Date(data.anchorDate);
+            let e = p.manualEndDate ? new Date(p.manualEndDate) : addBusinessDays(s, p.days - 1);
+
+            // Recalculate days based on range? 
+            // User requirement: "End Date (Input) ... enabled".
+            // So we trust the dates.
+            // Update the p.days for display?
+            const diff = getDaysDiff(s, e);
+            // p.days = diff; // Should we mutate data here? ideally valid update happens in Input listener.
+            // But results should reflect it.
+            return { ...p, startDate: s, endDate: e, days: diff };
+        }
+        return null;
+    };
+
+
+    // --- Anchor Calculation ---
+    // If Anchor is parallel, it breaks the chain logic. Anchor MUST be sequential.
+    // Ideally we prevent this in UI, but handle here safely.
+    // If Anchor IS parallel, we treat it as an isolated parallel task?
+    // Then what references the others?
+    // Let's assume Anchor IS sequential (enforced in UI).
 
     let anchorStart, anchorEnd;
 
@@ -230,18 +258,34 @@ function calculateSchedule(targetData = null) {
 
     results[anchorIndex] = { ...anchorPhase, startDate: anchorStart, endDate: anchorEnd };
 
-    // Preceding
+    // --- Preceding Chain ---
     let nextRefDate = anchorStart;
     for (let i = anchorIndex - 1; i >= 0; i--) {
+        const parallelRes = processParallel(i);
+        if (parallelRes) {
+            results[i] = parallelRes;
+            // Do NOT update nextRefDate
+            continue;
+        }
+
+        // Sequential
         let end = subBusinessDays(nextRefDate, 1);
         let start = subBusinessDays(end, Math.max(0, data.phases[i].days - 1));
         results[i] = { ...data.phases[i], startDate: start, endDate: end };
         nextRefDate = start;
     }
 
-    // Succeeding
+    // --- Succeeding Chain ---
     let prevRefDate = anchorEnd;
     for (let i = anchorIndex + 1; i < data.phases.length; i++) {
+        const parallelRes = processParallel(i);
+        if (parallelRes) {
+            results[i] = parallelRes;
+            // Do NOT update prevRefDate
+            continue;
+        }
+
+        // Sequential
         let start = addBusinessDays(prevRefDate, 1);
         let end = addBusinessDays(start, Math.max(0, data.phases[i].days - 1));
         results[i] = { ...data.phases[i], startDate: start, endDate: end };
@@ -290,6 +334,15 @@ function renderPhases() {
     const data = getActiveData();
     renderAnchorSelect();
 
+    // Calculate schedule to show dates in the list
+    const schedule = calculateSchedule(data);
+    const dateMap = {};
+    if (schedule) {
+        schedule.forEach((s, i) => {
+            dateMap[data.phases[i].id] = { start: s.startDate, end: s.endDate };
+        });
+    }
+
     data.phases.forEach((phase, index) => {
         const row = document.createElement('div');
         row.className = 'phase-row draggable-item';
@@ -297,26 +350,75 @@ function renderPhases() {
         row.draggable = true;
 
         const isAnchor = data.anchorPhaseId === phase.id;
+        const isParallel = !!phase.isParallel;
         const activeStyle = isAnchor ? 'border-left: 3px solid var(--accent-primary); background: rgba(56,189,248,0.1);' : '';
 
         row.style.cssText = activeStyle;
 
+        // Parallel Logic: If parallel, Manual Dates Enabled, Days Disabled (calculated).
+        // If Sequential, Manual Dates Disabled (Text), Days Enabled.
+
+        // Consolidate Logic: Always use inputs.
+        // If parallel: value = manualDate, enabled.
+        // If sequential: value = calculatedDate, disabled.
+
+        let startDateVal = phase.manualStartDate || '';
+        let endDateVal = phase.manualEndDate || '';
+
+        if (!isParallel) {
+            const sDates = dateMap[phase.id];
+            if (sDates) {
+                // Format YYYY-MM-DD for input[type=date]
+                const iso = (d) => {
+                    const y = d.getFullYear();
+                    const m = String(d.getMonth() + 1).padStart(2, '0');
+                    const day = String(d.getDate()).padStart(2, '0');
+                    return `${y}-${m}-${day}`;
+                };
+                startDateVal = iso(sDates.start);
+                endDateVal = iso(sDates.end);
+            }
+        }
+
         row.innerHTML = `
-      <div style="cursor: grab; padding-right:0.5rem; color:var(--text-secondary); display:flex; flex-direction:column; align-items:center; justify-content:center;">
+      <div style="cursor: grab; padding-right:0.5rem; color:var(--text-secondary); display:flex; flex-direction:column; align-items:center; justify-content:center; width: 30px;">
          <span style="font-size:1.2rem;">⋮⋮</span>
          <span style="font-size:0.7rem; font-weight:bold;">#${index + 1}</span>
       </div>
       
-      <div style="flex-grow:1; display:flex; flex-direction:column; gap:0.25rem;">
-         <input type="text" class="phase-name-input" value="${phase.name}" data-idx="${index}" style="font-weight:bold;">
-         ${isAnchor ? `<div style="font-size:0.75rem; color:var(--accent-primary);">📌 Anchor (${data.anchorType === 'start' ? 'Start' : 'End'})</div>` : ''}
+      <div style="flex-grow:1; display:flex; align-items: center; gap:0.5rem;">
+         <div style="flex-grow:1; display:flex; flex-direction:column; gap:0.2rem;">
+             <input type="text" class="phase-name-input" value="${phase.name}" data-idx="${index}" style="font-weight:bold; width:100%; border:none; background:transparent; border-bottom:1px solid var(--glass-border); padding:0.2rem 0;">
+             ${isAnchor ? `<div style="font-size:0.75rem; color:var(--accent-primary);">📌 Anchor (${data.anchorType === 'start' ? 'Start' : 'End'})</div>` : ''}
+         </div>
+         
+         <!-- Parallel Checkbox (Icon only) -->
+         <label title="並行作業 (自動計算から除外)" style="cursor:pointer; display:flex; align-items:center; padding: 0.2rem;">
+            <input type="checkbox" class="phase-parallel-chk" data-idx="${index}" ${isParallel ? 'checked' : ''} ${isAnchor ? 'disabled' : ''}>
+         </label>
       </div>
       
-      <div style="display:flex; align-items:center; gap:0.5rem">
-        <input type="number" class="phase-days-input" value="${phase.days}" min="1" data-idx="${index}">
-        <span style="font-size:0.8rem; color:var(--text-secondary)">days</span>
+      <!-- Date/Days Area -->
+      <div style="display:flex; flex-direction:column; gap:0.2rem; align-items:flex-end; min-width: 140px;">
+          <div style="display:flex; gap:0.2rem; justify-content: flex-end; height: 24px; align-items: center;">
+            <input type="date" class="phase-start-input" data-idx="${index}" value="${startDateVal}" 
+                   style="width:105px; font-size:0.75rem; padding:0.1rem; ${!isParallel ? 'color:var(--text-secondary); border:none; background:transparent;' : ''}" 
+                   ${!isParallel ? 'disabled' : ''}>
+            <span style="font-size:0.75rem;">-</span>
+            <input type="date" class="phase-end-input" data-idx="${index}" value="${endDateVal}" 
+                   style="width:105px; font-size:0.75rem; padding:0.1rem; ${!isParallel ? 'color:var(--text-secondary); border:none; background:transparent;' : ''}" 
+                   ${!isParallel ? 'disabled' : ''}>
+          </div>
+
+          <div style="display:flex; align-items:center; gap:0.3rem">
+            <input type="number" class="phase-days-input" value="${phase.days}" min="1" data-idx="${index}" 
+                   style="width:50px !important; text-align:right; font-size: 0.9rem;" 
+                   ${isParallel ? 'readonly style="background:transparent; border:none; color:var(--text-secondary); width:50px !important; text-align:right;"' : ''}>
+            <span style="font-size:0.75rem; color:var(--text-secondary)">days</span>
+          </div>
       </div>
-      <button class="icon-btn delete-btn" data-idx="${index}" title="削除">
+
+      <button class="icon-btn delete-btn" data-idx="${index}" title="削除" style="margin-left: 0.5rem;">
         🗑️
       </button>
     `;
@@ -368,8 +470,70 @@ function attachPhaseListeners() {
         });
     });
 
+    // NEW: Parallel Checkbox
+    document.querySelectorAll('.phase-parallel-chk').forEach(el => {
+        el.addEventListener('change', (e) => {
+            const idx = parseInt(e.target.dataset.idx);
+            const data = getActiveData();
+            const phase = data.phases[idx];
+
+            // Validation: Anchor cannot be parallel (Double check)
+            if (data.anchorPhaseId === phase.id) {
+                alert("Anchor phase cannot be set to parallel.");
+                e.target.checked = false;
+                return;
+            }
+
+            phase.isParallel = e.target.checked;
+
+            // Init default manual dates if becoming parallel
+            if (phase.isParallel) {
+                if (!phase.manualStartDate) phase.manualStartDate = data.anchorDate;
+                if (!phase.manualEndDate) phase.manualEndDate = data.anchorDate;
+            }
+
+            saveState();
+            renderPhases();
+            updateSchedule();
+        });
+    });
+
+    // NEW: Manual Date Inputs
+    document.querySelectorAll('.phase-start-input').forEach(el => {
+        el.addEventListener('change', (e) => {
+            const idx = parseInt(e.target.dataset.idx);
+            const data = getActiveData();
+            data.phases[idx].manualStartDate = e.target.value;
+            // Auto update days?
+            const s = new Date(data.phases[idx].manualStartDate);
+            const eDate = new Date(data.phases[idx].manualEndDate || data.phases[idx].manualStartDate);
+            if (!isNaN(s) && !isNaN(eDate)) {
+                data.phases[idx].days = getDaysDiff(s, eDate);
+            }
+            saveState();
+            updateSchedule(); // Re-render logic will update calculated fields
+        });
+    });
+
+    document.querySelectorAll('.phase-end-input').forEach(el => {
+        el.addEventListener('change', (e) => {
+            const idx = parseInt(e.target.dataset.idx);
+            const data = getActiveData();
+            data.phases[idx].manualEndDate = e.target.value;
+            // Auto update days
+            const s = new Date(data.phases[idx].manualStartDate || data.phases[idx].manualEndDate);
+            const eDate = new Date(data.phases[idx].manualEndDate);
+            if (!isNaN(s) && !isNaN(eDate)) {
+                data.phases[idx].days = getDaysDiff(s, eDate);
+            }
+            saveState();
+            updateSchedule();
+        });
+    });
+
     document.querySelectorAll('.phase-days-input').forEach(el => {
         el.addEventListener('input', (e) => {
+            if (e.target.readOnly) return; // Ignore if parallel
             const val = parseInt(e.target.value) || 0;
             const data = getActiveData();
             data.phases[e.target.dataset.idx].days = Math.max(1, val);
@@ -452,14 +616,14 @@ function renderSchedule() {
     const sortBtn = document.getElementById('sort-toggle-btn');
     if (sortBtn) {
         const arrow = data.sortOrder === 'asc' ? '⬇️' : '⬆️';
-        const label = data.sortOrder === 'asc' ? 'Chronological (時系列順)' : 'Reverse (逆順)';
-        sortBtn.innerHTML = `<span>Sort: ${label} ${arrow}</span>`;
+        const label = data.sortOrder === 'asc' ? '昇順' : '降順';
+        sortBtn.innerHTML = `<span>${label} ${arrow}</span>`;
     }
 
     let html = '<div style="display:flex; flex-direction:column; gap:1.5rem; padding-top:1rem;">';
     displayList.forEach(item => {
         const isAnchor = item.id === data.anchorPhaseId;
-        const highlight = isAnchor ? `border-left-color: var(--accent-primary); background: rgba(56,189,248,0.05);` : '';
+        const highlight = isAnchor ? `border-left-color: var(--accent-primary); background: rgba(56, 189, 248, 0.05);` : '';
         const WORKDAYS_JA = ['日', '月', '火', '水', '木', '金', '土'];
         const fmt = (d) => `${d.getMonth() + 1}/${d.getDate()} (${WORKDAYS_JA[d.getDay()]})`;
 
@@ -528,10 +692,17 @@ function renderGantt() {
     const totalDays = Math.floor((maxDate - minDate) / (1000 * 60 * 60 * 24)) + 1;
     const totalWidth = totalDays * PX_PER_DAY;
 
+    // --- WRAPPER ---
+    // Create a canvas wrapper to hold everything. This ensures correct scrolling.
+    const canvas = document.createElement('div');
+    canvas.style.width = `${totalWidth}px`;
+    canvas.style.position = 'relative'; // Anchor for absolute grid lines
+    canvas.style.minHeight = '100px';
+
     // 3. Create Header Row
     const headerRow = document.createElement('div');
     headerRow.className = 'gantt-header';
-    headerRow.style.width = `${totalWidth}px`;
+    headerRow.style.width = '100%'; // Match canvas
 
     let currentDate = new Date(minDate);
     const gridCols = [];
@@ -570,36 +741,25 @@ function renderGantt() {
         currentDate.setDate(currentDate.getDate() + 1);
     }
 
-    container.appendChild(headerRow);
+    canvas.appendChild(headerRow);
 
     // 4. Create Rows (Groups)
-    let totalRowCount = 0; // for grid height
-
     allSchedules.forEach(group => {
         // Group Header
         const groupHeader = document.createElement('div');
         groupHeader.className = 'gantt-row';
-        groupHeader.style.width = `${totalWidth}px`;
+        groupHeader.style.width = '100%';
         groupHeader.style.background = 'rgba(0,0,0,0.2)';
         groupHeader.style.height = '30px';
-        groupHeader.style.position = 'sticky';
-        groupHeader.style.left = '0'; // Actually this won't stick horizontally easily without more complex CSS. 
-        // Let's just make it a row that spans full width.
-        // Problem: If we scroll horizontally, the text scrolls away.
-        // Fix: Use sticky? 
-        // For now, let's just put the name in the first visible area or just normal.
 
         const groupLabel = document.createElement('div');
-        groupLabel.style.position = 'sticky';
-        groupLabel.style.left = '0';
         groupLabel.style.padding = '0 1rem';
         groupLabel.style.fontWeight = 'bold';
         groupLabel.style.color = 'var(--text-primary)';
         groupLabel.textContent = `📂 ${group.info.name}`;
 
         groupHeader.appendChild(groupLabel);
-        container.appendChild(groupHeader);
-        totalRowCount++; // Header counts as row for height? Maybe.
+        canvas.appendChild(groupHeader);
 
         // Sort items for display
         let displayList = [...group.items];
@@ -608,15 +768,13 @@ function renderGantt() {
         displayList.forEach(item => {
             const row = document.createElement('div');
             row.className = 'gantt-row';
-            row.style.width = `${totalWidth}px`;
+            row.style.width = '100%';
 
             const startDiff = Math.floor((item.startDate - minDate) / (1000 * 60 * 60 * 24));
-            const durationDays = MAthMeasureDays(item.startDate, item.endDate);
-            // Simple helper needed or just re-calc
-            const dDays = Math.floor((item.endDate - item.startDate) / (1000 * 60 * 60 * 24)) + 1;
+            const durationDays = getDaysDiff(item.startDate, item.endDate);
 
             const barLeft = startDiff * PX_PER_DAY;
-            const barWidth = dDays * PX_PER_DAY;
+            const barWidth = durationDays * PX_PER_DAY;
 
             const bar = document.createElement('div');
             bar.className = 'gantt-bar';
@@ -632,27 +790,16 @@ function renderGantt() {
             }
 
             row.appendChild(bar);
-            container.appendChild(row);
-            totalRowCount++;
+            canvas.appendChild(row);
         });
     });
 
     // 5. Global Grid Lines
     const gridOverlay = document.createElement('div');
     gridOverlay.className = 'gantt-grid-lines';
-    gridOverlay.style.width = `${totalWidth}px`;
-    // Approximate height: (header + rows) * height? 
-    // Easier: set height to 100% of container scrollHeight after render?
-    // Or just a very large number and overflow hidden on parent?
-    // Let's rely on container.scrollHeight
-
-    // We need to append grid first to get it behind.
-    container.insertBefore(gridOverlay, container.firstChild);
-
-    // Set height after render
-    setTimeout(() => {
-        gridOverlay.style.height = `${container.scrollHeight}px`;
-    }, 0);
+    gridOverlay.style.width = '100%';
+    gridOverlay.style.height = '100%'; // Will fill relative parent (canvas)
+    gridOverlay.style.zIndex = '0'; // Behind header and rows (rows have z context via relative)
 
     gridCols.forEach((col) => {
         const line = document.createElement('div');
@@ -662,9 +809,15 @@ function renderGantt() {
         if (col.isHoliday) line.classList.add('gantt-holiday');
         gridOverlay.appendChild(line);
     });
+
+    // Prepend grid to canvas so it sits behind
+    canvas.insertBefore(gridOverlay, canvas.firstChild);
+
+    // Finally append canvas to scroll container
+    container.appendChild(canvas);
 }
 
-function MAthMeasureDays(d1, d2) {
+function getDaysDiff(d1, d2) {
     return Math.floor((d2 - d1) / (1000 * 60 * 60 * 24)) + 1;
 }
 

@@ -118,8 +118,15 @@ button.add-btn:hover {
 /* Layout */
 .grid-layout {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+    /* Left column fixed width 320px (Results), Right column takes rest (Phases) */
+    grid-template-columns: 320px 1fr;
     gap: 2rem;
+}
+
+@media (max-width: 800px) {
+    .grid-layout {
+        grid-template-columns: 1fr;
+    }
 }
 
 .phase-row {
