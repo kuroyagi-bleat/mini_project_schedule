@@ -844,15 +844,18 @@ function updateSchedule() {
 
 function attachTimelineListeners() {
     if (timelineSelect) {
-        timelineSelect.addEventListener('change', (e) => {
+        const newSelect = replaceWithClone(timelineSelect);
+        newSelect.addEventListener('change', (e) => {
             appState.activeTimelineId = e.target.value;
             saveState();
             initUI(); // Full re-render needed
         });
+        timelineSelect = newSelect;
     }
 
     if (addTimelineBtn) {
-        addTimelineBtn.addEventListener('click', () => {
+        const newBtn = replaceWithClone(addTimelineBtn);
+        newBtn.addEventListener('click', () => {
             const name = prompt("Enter new timeline name:", `Sprint ${appState.timelines.length + 1}`);
             if (!name) return;
 
@@ -867,10 +870,12 @@ function attachTimelineListeners() {
             renderTimelineSelect();
             initUI();
         });
+        addTimelineBtn = newBtn;
     }
 
     if (renameTimelineBtn) {
-        renameTimelineBtn.addEventListener('click', () => {
+        const newBtn = replaceWithClone(renameTimelineBtn);
+        newBtn.addEventListener('click', () => {
             const active = getActiveTimeline();
             const newName = prompt("Rename timeline:", active.name);
             if (newName) {
@@ -879,10 +884,12 @@ function attachTimelineListeners() {
                 renderTimelineSelect();
             }
         });
+        renameTimelineBtn = newBtn;
     }
 
     if (deleteTimelineBtn) {
-        deleteTimelineBtn.addEventListener('click', () => {
+        const newBtn = replaceWithClone(deleteTimelineBtn);
+        newBtn.addEventListener('click', () => {
             if (appState.timelines.length <= 1) {
                 alert("Cannot delete the last timeline.");
                 return;
@@ -894,6 +901,7 @@ function attachTimelineListeners() {
             saveState();
             initUI();
         });
+        deleteTimelineBtn = newBtn;
     }
 }
 
