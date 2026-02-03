@@ -94,3 +94,25 @@
     z-index: 2;
     pointer-events: none;
 }
+
+/* Interactive Elements */
+.gantt-bar {
+    cursor: grab;
+}
+.gantt-bar:active {
+    cursor: grabbing;
+}
+.resize-handle {
+    position: absolute;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    width: 8px;
+    cursor: col-resize;
+    z-index: 20;
+    border-radius: 0 4px 4px 0;
+    transition: background 0.2s;
+}
+.resize-handle:hover {
+    background: rgba(255,255,255,0.4);
+}

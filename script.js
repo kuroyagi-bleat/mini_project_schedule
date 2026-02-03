@@ -412,8 +412,8 @@ function renderPhases() {
 
           <div style="display:flex; align-items:center; gap:0.3rem">
             <input type="number" class="phase-days-input" value="${phase.days}" min="1" data-idx="${index}" 
-                   style="width:50px !important; text-align:right; font-size: 0.9rem;" 
-                   ${isParallel ? 'readonly style="background:transparent; border:none; color:var(--text-secondary); width:50px !important; text-align:right;"' : ''}>
+                   style="width:70px !important; text-align:right; font-size: 0.9rem;" 
+                   ${isParallel ? 'readonly style="background:transparent; border:none; color:var(--text-secondary); width:70px !important; text-align:right;"' : ''}>
             <span style="font-size:0.75rem; color:var(--text-secondary)">days</span>
           </div>
       </div>
@@ -789,6 +789,17 @@ function renderGantt() {
                 bar.style.boxShadow = '0 0 10px var(--accent-secondary)';
             }
 
+            // --- INTERACTIVE ATTRIBUTES ---
+            bar.dataset.id = item.id;
+            bar.dataset.timelineId = group.info.id;
+
+            // RESIZE HANDLE
+            const handle = document.createElement('div');
+            handle.className = 'resize-handle';
+            handle.dataset.id = item.id;
+            handle.dataset.timelineId = group.info.id;
+            bar.appendChild(handle);
+
             row.appendChild(bar);
             canvas.appendChild(row);
         });
@@ -815,6 +826,9 @@ function renderGantt() {
 
     // Finally append canvas to scroll container
     container.appendChild(canvas);
+
+    // ATTACH LISTENERS
+    attachGanttListeners(container, PX_PER_DAY);
 }
 
 function getDaysDiff(d1, d2) {
@@ -1097,4 +1111,231 @@ function importJson(file) {
         }
     };
     reader.readAsText(file);
+}
+
+// --- INTERACTIVE GANTT STATE & LISTENERS ---
+let ganttDragState = {
+    active: false,
+    type: null, // 'move' | 'resize'
+    startX: 0,
+    initialLeft: 0,
+    initialWidth: 0,
+    phaseId: null,
+    timelineId: null,
+    initialDate: null, // For move
+    initialDays: 0,    // For resize
+    targetBar: null
+};
+
+function attachGanttListeners(container, pxPerDay) {
+    if (container.dataset.listening) return;
+    container.dataset.listening = 'true';
+
+    container.addEventListener('mousedown', (e) => {
+        const handle = e.target.closest('.resize-handle');
+        const bar = e.target.closest('.gantt-bar');
+
+        if (handle) {
+            e.preventDefault();
+            e.stopPropagation();
+            startDrag(e, 'resize', handle.parentElement, handle.dataset.id, handle.dataset.timelineId);
+        } else if (bar) {
+            e.preventDefault();
+            startDrag(e, 'move', bar, bar.dataset.id, bar.dataset.timelineId);
+        }
+    });
+
+    const onMouseMove = (e) => {
+        if (!ganttDragState.active) return;
+
+        const deltaX = e.clientX - ganttDragState.startX;
+
+        if (ganttDragState.type === 'move') {
+            ganttDragState.targetBar.style.transform = `translateX(${deltaX}px)`;
+        } else if (ganttDragState.type === 'resize') {
+            const newW = Math.max(pxPerDay, ganttDragState.initialWidth + deltaX);
+            ganttDragState.targetBar.style.width = `${newW}px`;
+        }
+    };
+
+    const onMouseUp = (e) => {
+        if (!ganttDragState.active) return;
+
+        const deltaX = e.clientX - ganttDragState.startX;
+        const deltaDays = Math.round(deltaX / pxPerDay);
+
+        applyGanttChange(deltaDays);
+
+        ganttDragState.active = false;
+        if (ganttDragState.targetBar) {
+            ganttDragState.targetBar.style.transform = ''; // Clear visual override
+            ganttDragState.targetBar.classList.remove('dragging');
+            ganttDragState.targetBar.classList.remove('active-drag');
+            ganttDragState.targetBar = null;
+        }
+
+        document.body.style.cursor = '';
+    };
+
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+}
+
+function startDrag(e, type, bar, phaseId, timelineId) {
+    ganttDragState.active = true;
+    ganttDragState.type = type;
+    ganttDragState.startX = e.clientX;
+    ganttDragState.targetBar = bar;
+    ganttDragState.phaseId = phaseId;
+    ganttDragState.timelineId = timelineId;
+
+    const rect = bar.getBoundingClientRect();
+    ganttDragState.initialWidth = rect.width;
+
+    // Find Data
+    const timeline = appState.timelines.find(t => t.id === timelineId);
+    if (!timeline) return;
+
+    const phase = timeline.data.phases.find(p => p.id === phaseId);
+    if (!phase) return;
+
+    ganttDragState.initialDays = phase.days;
+
+    bar.classList.add('dragging');
+    bar.classList.add('active-drag'); // For z-index boost
+    document.body.style.cursor = type === 'move' ? 'grabbing' : 'col-resize';
+}
+
+function applyGanttChange(deltaDays) {
+    if (deltaDays === 0) return; // No change
+
+    const { type, phaseId, timelineId, initialDays } = ganttDragState;
+    const timeline = appState.timelines.find(t => t.id === timelineId);
+    if (!timeline) return;
+    const data = timeline.data;
+    const phase = data.phases.find(p => p.id === phaseId);
+    if (!phase) return;
+
+    if (type === 'resize') {
+        const newDays = initialDays + deltaDays;
+        phase.days = Math.max(1, newDays);
+
+        if (phase.isParallel) {
+            const iso = (d) => {
+                const y = d.getFullYear();
+                const m = String(d.getMonth() + 1).padStart(2, '0');
+                const day = String(d.getDate()).padStart(2, '0');
+                return `${y}-${m}-${day}`;
+            };
+
+            const startStr = phase.manualStartDate || timeline.data.anchorDate; // Fallback
+            // Fix: calculate new end date.
+            // Simplified approach: Start + Days (Business days logic is tricky without proper calendar context here)
+            // But we have getDaysDiff... let's assume calendar days for resize for parallel now for simplicity
+            // OR re-use addBusinessDays if available?
+            // Since parallel logic is manual, let's just update end date strictly.
+            // Wait, if it's parallel, "days" is derived from dates.
+            // If I change days, I should change End Date.
+
+            const start = new Date(startStr);
+            const end = new Date(startStr);
+            // We want end date such that getDaysDiff(start, end) ~= newDays.
+            // Approximate since we don't have easy business day add function handy here (it's inside calculateSchedule usually?)
+            // Actually, let's just add NEWDAYS * 1.4 (weekend buffer) and refine? No.
+
+            // Let's just update the manualEndDate to start + newDays (calendar days) for now?
+            // No, that breaks business day logic.
+            // Let's accept that for Parallel tasks, dragging resize handle changes "Days" property
+            // and we calculate new EndDate as Start + Days (calendar) for now.
+
+            end.setDate(end.getDate() + newDays);
+            phase.manualEndDate = iso(end);
+        }
+
+    } else if (type === 'move') {
+        const iso = (d) => {
+            const y = d.getFullYear();
+            const m = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            return `${y}-${m}-${day}`;
+        };
+
+        // Is Anchor?
+        if (phase.id === data.anchorPhaseId) {
+            const currentAnchor = new Date(data.anchorDate);
+            currentAnchor.setDate(currentAnchor.getDate() + deltaDays);
+            data.anchorDate = iso(currentAnchor);
+
+        } else {
+            // Normal Phase (Collision-Aware Move)
+
+            // 1. Determine Proposed Position without modifying state yet
+            let tempStart, tempEnd;
+            let currentIsParallel = phase.isParallel;
+
+            // Determine base dates from CURRENT state
+            if (currentIsParallel && phase.manualStartDate) {
+                tempStart = new Date(phase.manualStartDate);
+                tempEnd = new Date(phase.manualEndDate);
+            } else {
+                // Currently sequential. Use calculated position.
+                const sch = calculateSchedule(data);
+                const item = sch.find(i => i.id === phaseId);
+                if (item) {
+                    tempStart = new Date(item.startDate);
+                    tempEnd = new Date(item.endDate);
+                } else {
+                    tempStart = new Date(data.anchorDate);
+                    tempEnd = new Date(data.anchorDate);
+                }
+            }
+
+            // Apply Move Delta to temp dates
+            const proposedStart = new Date(tempStart);
+            const proposedEnd = new Date(tempEnd);
+            proposedStart.setDate(proposedStart.getDate() + deltaDays);
+            proposedEnd.setDate(proposedEnd.getDate() + deltaDays);
+
+            // 2. Collision Check
+            // Check against CURRENT positions of all other tasks.
+            const currentSchedule = calculateSchedule(data);
+
+            const hasCollision = currentSchedule.some(otherItem => {
+                if (otherItem.id === phaseId) return false; // Skip self
+
+                // Check overlap only with Sequential (!isParallel) tasks
+                const otherPhase = data.phases.find(p => p.id === otherItem.id);
+                if (!otherPhase || otherPhase.isParallel) return false;
+                if (otherPhase.id === data.anchorPhaseId) return false;
+
+                // Check Overlap
+                const s1 = proposedStart.getTime();
+                const e1 = proposedEnd.getTime();
+                const s2 = otherItem.startDate.getTime();
+                const e2 = otherItem.endDate.getTime();
+
+                return (s1 <= e2 && e1 >= s2);
+            });
+
+            if (hasCollision) {
+                // Collision! Abort move.
+                renderGantt(); // Snap back
+                return;
+            }
+
+            // 3. Apply Change
+            if (!phase.isParallel) {
+                phase.isParallel = true;
+                phase.manualStartDate = iso(tempStart);
+                phase.manualEndDate = iso(tempEnd);
+            }
+
+            phase.manualStartDate = iso(proposedStart);
+            phase.manualEndDate = iso(proposedEnd);
+        }
+    }
+
+    saveState();
+    renderPhases();
+    updateSchedule();
 }
