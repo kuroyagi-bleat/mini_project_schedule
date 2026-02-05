@@ -843,19 +843,17 @@ function updateSchedule() {
 // --- Init & Top Level Listeners ---
 
 function attachTimelineListeners() {
+    // Use .on[event] to avoid duplicate listeners without DOM cloning/replacement issues
     if (timelineSelect) {
-        const newSelect = replaceWithClone(timelineSelect);
-        newSelect.addEventListener('change', (e) => {
+        timelineSelect.onchange = (e) => {
             appState.activeTimelineId = e.target.value;
             saveState();
             initUI(); // Full re-render needed
-        });
-        timelineSelect = newSelect;
+        };
     }
 
     if (addTimelineBtn) {
-        const newBtn = replaceWithClone(addTimelineBtn);
-        newBtn.addEventListener('click', () => {
+        addTimelineBtn.onclick = () => {
             const name = prompt("Enter new timeline name:", `Sprint ${appState.timelines.length + 1}`);
             if (!name) return;
 
@@ -869,13 +867,11 @@ function attachTimelineListeners() {
             saveState();
             renderTimelineSelect();
             initUI();
-        });
-        addTimelineBtn = newBtn;
+        };
     }
 
     if (renameTimelineBtn) {
-        const newBtn = replaceWithClone(renameTimelineBtn);
-        newBtn.addEventListener('click', () => {
+        renameTimelineBtn.onclick = () => {
             const active = getActiveTimeline();
             const newName = prompt("Rename timeline:", active.name);
             if (newName) {
@@ -883,13 +879,11 @@ function attachTimelineListeners() {
                 saveState();
                 renderTimelineSelect();
             }
-        });
-        renameTimelineBtn = newBtn;
+        };
     }
 
     if (deleteTimelineBtn) {
-        const newBtn = replaceWithClone(deleteTimelineBtn);
-        newBtn.addEventListener('click', () => {
+        deleteTimelineBtn.onclick = () => {
             if (appState.timelines.length <= 1) {
                 alert("Cannot delete the last timeline.");
                 return;
@@ -900,8 +894,7 @@ function attachTimelineListeners() {
             appState.activeTimelineId = appState.timelines[0].id;
             saveState();
             initUI();
-        });
-        deleteTimelineBtn = newBtn;
+        };
     }
 }
 
