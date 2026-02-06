@@ -532,11 +532,15 @@ function attachPhaseListeners() {
     });
 
     document.querySelectorAll('.phase-days-input').forEach(el => {
-        el.addEventListener('input', (e) => {
-            if (e.target.readOnly) return; // Ignore if parallel
-            const val = parseInt(e.target.value) || 0;
+        el.addEventListener('change', (e) => { // Changed from 'input' to 'change' for better UX on typing
+            if (e.target.readOnly) return;
+            let val = parseInt(e.target.value) || 0;
+            if (val < 1) {
+                val = 1;
+                e.target.value = 1; // Visual update
+            }
             const data = getActiveData();
-            data.phases[e.target.dataset.idx].days = Math.max(1, val);
+            data.phases[e.target.dataset.idx].days = val;
             saveState();
             updateSchedule();
         });
@@ -975,16 +979,16 @@ function attachTopListeners() {
             let list = [...schedule];
             if (data.sortOrder === 'asc') list.reverse();
 
-            const SEPARATOR = "　";
-            let text = `工程名${SEPARATOR}開始日${SEPARATOR}終了日${SEPARATOR}（営業日）\n`;
+            const SEPARATOR = " / ";
+            let text = ""; // No header needed for this format usually, or matches the pattern
             const fmt = (d) => {
                 const y = d.getFullYear();
                 const m = String(d.getMonth() + 1).padStart(2, '0');
                 const d_str = String(d.getDate()).padStart(2, '0');
-                return `${y}/${m}/${d_str}`;
+                return `${y}-${m}-${d_str}`;
             };
             list.forEach(item => {
-                text += `${item.name}${SEPARATOR}${fmt(item.startDate)}${SEPARATOR}${fmt(item.endDate)}${SEPARATOR}（${item.days}）\n`;
+                text += `${fmt(item.startDate)} ~ ${fmt(item.endDate)}${SEPARATOR}${item.name}${SEPARATOR}${item.days}日\n`;
             });
             navigator.clipboard.writeText(text).then(() => {
                 const btn = document.getElementById('copy-text-btn');
@@ -1014,6 +1018,43 @@ function attachTopListeners() {
     if (document.getElementById('file-input')) replaceWithClone(document.getElementById('file-input')).addEventListener('change', (e) => {
         if (e.target.files[0]) importJson(e.target.files[0]);
     });
+
+    const exportBtn = document.getElementById('export-image-btn');
+    if (exportBtn) {
+        replaceWithClone(exportBtn).addEventListener('click', (e) => {
+            const btn = e.target;
+            const container = document.getElementById('gantt-container');
+            if (!container || !container.firstChild) return;
+
+            const originalText = "📷 Save Image"; // static fallback
+            btn.innerText = '⏳ Capturing...';
+
+            // Check library
+            if (typeof html2canvas === 'undefined') {
+                alert('Library not loaded. Please check internet connection.');
+                btn.innerText = originalText;
+                return;
+            }
+
+            // Target the inner full-width wrapper
+            html2canvas(container.firstChild, {
+                backgroundColor: '#1e293b',
+                scale: 2
+            }).then(canvas => {
+                const link = document.createElement('a');
+                link.download = `gantt-chart-${new Date().toISOString().split('T')[0]}.png`;
+                link.href = canvas.toDataURL();
+                link.click();
+
+                btn.innerText = '✅ Saved!';
+                setTimeout(() => btn.innerText = originalText, 2000);
+            }).catch(err => {
+                console.error(err);
+                alert('Export failed.');
+                btn.innerText = originalText;
+            });
+        });
+    }
 }
 
 function replaceWithClone(node) {
@@ -1297,32 +1338,30 @@ function applyGanttChange(deltaDays) {
             proposedStart.setDate(proposedStart.getDate() + deltaDays);
             proposedEnd.setDate(proposedEnd.getDate() + deltaDays);
 
-            // 2. Collision Check
-            // Check against CURRENT positions of all other tasks.
-            const currentSchedule = calculateSchedule(data);
+            // 2. Collision Check - DISABLED
+            // User feedback indicates Parallel tasks should be allowed to overlap Sequential tasks.
+            // Since any move converts a Sequential task to Parallel (or keeps it Parallel),
+            // we should allow free movement.
+            /*
+            const currentSchedule = calculateSchedule(data); 
 
             const hasCollision = currentSchedule.some(otherItem => {
-                if (otherItem.id === phaseId) return false; // Skip self
-
-                // Check overlap only with Sequential (!isParallel) tasks
+                if (otherItem.id === phaseId) return false; 
                 const otherPhase = data.phases.find(p => p.id === otherItem.id);
                 if (!otherPhase || otherPhase.isParallel) return false;
                 if (otherPhase.id === data.anchorPhaseId) return false;
-
-                // Check Overlap
                 const s1 = proposedStart.getTime();
                 const e1 = proposedEnd.getTime();
                 const s2 = otherItem.startDate.getTime();
                 const e2 = otherItem.endDate.getTime();
-
                 return (s1 <= e2 && e1 >= s2);
             });
 
             if (hasCollision) {
-                // Collision! Abort move.
-                renderGantt(); // Snap back
+                renderGantt(); 
                 return;
             }
+            */
 
             // 3. Apply Change
             if (!phase.isParallel) {
